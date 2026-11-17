@@ -12,21 +12,20 @@ export default async function MeasurementsPage({ params }: { params: Promise<{ l
   const t = getDict(locale);
   const a = t.admin;
   const base = `/${locale}/admin`;
-  const rows = db()
-    .prepare(
+  const rows = await db().prepare(
       `SELECT m.*, c.name cname, (SELECT COUNT(*) FROM measurement_items i WHERE i.measurement_id = m.id) n,
        (SELECT GROUP_CONCAT(DISTINCT product_type) FROM measurement_items i WHERE i.measurement_id = m.id) types,
        (SELECT id FROM orders o WHERE o.measurement_id = m.id LIMIT 1) order_id
        FROM measurements m JOIN clients c ON c.id = m.client_id ORDER BY m.id DESC`,
     )
     .all() as { id: number; title: string | null; date: string | null; cname: string; client_id: number; n: number; types: string | null; taken_by: string | null; order_id: number | null; closed: number }[];
-  const waiting = new Map(getWaiting().map((w) => [w.id, w]));
-  const { red } = followupDays();
+  const waiting = new Map((await getWaiting()).map((w) => [w.id, w]));
+  const { red } = (await followupDays());
   const isRed = (id: number) => (waiting.get(id)?.days ?? -1) >= red;
   // Overdue sheets first, then newest
   rows.sort((x, y) => Number(isRed(y.id)) - Number(isRed(x.id)) || (waiting.get(y.id)?.days ?? 0) - (waiting.get(x.id)?.days ?? 0) || y.id - x.id);
   const fu = a.followup;
-  const clients = db().prepare("SELECT id, name FROM clients ORDER BY name").all() as { id: number; name: string }[];
+  const clients = await db().prepare("SELECT id, name FROM clients ORDER BY name").all() as { id: number; name: string }[];
 
   return (
     <>

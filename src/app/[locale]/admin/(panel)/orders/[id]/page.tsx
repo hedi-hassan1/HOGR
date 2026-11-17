@@ -17,18 +17,18 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
   const t = getDict(locale);
   const a = t.admin;
   const base = `/${locale}/admin`;
-  const cur = getSettings().currency;
-  const o = db().prepare("SELECT o.*, c.name cname, c.phone cphone FROM orders o JOIN clients c ON c.id = o.client_id WHERE o.id = ?").get(Number(id)) as
+  const cur = (await getSettings()).currency;
+  const o = await db().prepare("SELECT o.*, c.name cname, c.phone cphone FROM orders o JOIN clients c ON c.id = o.client_id WHERE o.id = ?").get(Number(id)) as
     | { id: number; client_id: number; measurement_id: number | null; cname: string; cphone: string | null; title: string | null; status: string; discount: number; due_date: string | null; notes: string | null; created_at: string; accepted_at: string | null }
     | undefined;
   if (!o) notFound();
   const S = a.share;
   const pub = await publicBase();
-  const clientLink = `${pub.url}/${locale}/o/${shareToken(o.id)}`;
-  const prices = getPrices().map((p) => ({ id: p.id, type: p.product_type, label: priceName(p, locale), unit: p.unit, price: p.price }));
-  const items = db().prepare("SELECT * FROM order_items WHERE order_id = ? ORDER BY sort, id").all(o.id) as Record<string, string | number | null>[];
-  const pays = db().prepare("SELECT * FROM payments WHERE order_id = ? ORDER BY date, id").all(o.id) as { id: number; amount: number; method: string; date: string; note: string | null }[];
-  const tt = orderTotals(o.id);
+  const clientLink = `${pub.url}/${locale}/o/${(await shareToken(o.id))}`;
+  const prices = (await getPrices()).map((p) => ({ id: p.id, type: p.product_type, label: priceName(p, locale), unit: p.unit, price: p.price }));
+  const items = await db().prepare("SELECT * FROM order_items WHERE order_id = ? ORDER BY sort, id").all(o.id) as Record<string, string | number | null>[];
+  const pays = await db().prepare("SELECT * FROM payments WHERE order_id = ? ORDER BY date, id").all(o.id) as { id: number; amount: number; method: string; date: string; note: string | null }[];
+  const tt = (await orderTotals(o.id));
   const unpriced = items.filter((i) => !Number(i.unit_price)).length;
   const here = `${base}/orders/${o.id}`;
   const v = (x: unknown) => (x == null ? "" : String(x));

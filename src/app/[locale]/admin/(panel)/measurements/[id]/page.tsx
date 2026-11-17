@@ -18,15 +18,15 @@ export default async function MeasurementPage({ params, searchParams }: { params
   const t = getDict(locale);
   const a = t.admin;
   const base = `/${locale}/admin`;
-  const m = db().prepare("SELECT m.*, c.name cname FROM measurements m JOIN clients c ON c.id = m.client_id WHERE m.id = ?").get(Number(id)) as
+  const m = await db().prepare("SELECT m.*, c.name cname FROM measurements m JOIN clients c ON c.id = m.client_id WHERE m.id = ?").get(Number(id)) as
     | { id: number; client_id: number; cname: string; title: string | null; address: string | null; taken_by: string | null; date: string | null; notes: string | null; closed: number }
     | undefined;
   if (!m) notFound();
-  const wait = waitingInfo(m.id);
-  const { red } = followupDays();
+  const wait = (await waitingInfo(m.id));
+  const { red } = (await followupDays());
   const fu = a.followup;
-  const items = db().prepare("SELECT * FROM measurement_items WHERE measurement_id = ? ORDER BY sort, id").all(m.id) as Record<string, string | number | null>[];
-  const orders = db().prepare("SELECT id FROM orders WHERE measurement_id = ?").all(m.id) as { id: number }[];
+  const items = await db().prepare("SELECT * FROM measurement_items WHERE measurement_id = ? ORDER BY sort, id").all(m.id) as Record<string, string | number | null>[];
+  const orders = await db().prepare("SELECT id FROM orders WHERE measurement_id = ?").all(m.id) as { id: number }[];
   const initial: MRow[] = items.map((i) => ({
     product_type: String(i.product_type ?? "other"), room: String(i.room ?? ""), width: i.width == null ? "" : String(i.width), height: i.height == null ? "" : String(i.height),
     depth: i.depth == null ? "" : String(i.depth), qty: String(i.qty ?? 1), material: String(i.material ?? ""), color: String(i.color ?? ""), notes: String(i.notes ?? ""),

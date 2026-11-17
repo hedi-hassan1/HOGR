@@ -9,11 +9,11 @@ import { Badge, Empty, Hidden, Money } from "./ui";
 import { SubmitButton } from "./client";
 
 /** Installed orders that still have money to pay, with one-tap WhatsApp reminders. */
-export function DebtsList({ locale, a, limit }: { locale: string; a: Dict["admin"]; limit?: number }) {
-  const s = getSettings();
+export async function DebtsList({ locale, a, limit }: { locale: string; a: Dict["admin"]; limit?: number }) {
+  const s = (await getSettings());
   const L = a.debts;
   const base = `/${locale}/admin`;
-  const debts = getDebts().slice(0, limit ?? 500);
+  const debts = (await getDebts()).slice(0, limit ?? 500);
   if (!debts.length) return <Empty text={L.empty} />;
   const langs: [string, string][] = [["ckb", "کوردی"], ["ar", "عربي"], ["en", "EN"]];
   const first = s.debt_locale || "ckb";

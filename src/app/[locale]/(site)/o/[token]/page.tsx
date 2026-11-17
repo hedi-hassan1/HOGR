@@ -17,19 +17,18 @@ export default async function ClientOrderPage({ params }: { params: Promise<{ lo
   const t = getDict(locale);
   const L = t.site.client;
   const st = t.admin.orders.statuses;
-  const o = orderByToken(token);
-  const s = getSettings(locale);
+  const o = (await orderByToken(token));
+  const s = (await getSettings(locale));
   const cur = s.currency || "IQD";
 
   if (!o) {
     return <section className="mx-auto max-w-2xl px-4 py-24 text-center text-lg text-muted">{L.invalid}</section>;
   }
-  const items = db().prepare("SELECT * FROM order_items WHERE order_id = ? ORDER BY sort, id").all(o.id) as OrderItem[];
-  const tt = orderTotals(o.id);
-  const next = db()
-    .prepare("SELECT date, time, type FROM bookings WHERE client_id = ? AND status = 'scheduled' AND date >= ? ORDER BY date, time LIMIT 1")
+  const items = await db().prepare("SELECT * FROM order_items WHERE order_id = ? ORDER BY sort, id").all(o.id) as OrderItem[];
+  const tt = (await orderTotals(o.id));
+  const next = await db().prepare("SELECT date, time, type FROM bookings WHERE client_id = ? AND status = 'scheduled' AND date >= ? ORDER BY date, time LIMIT 1")
     .get(o.client_id, todayISO()) as { date: string; time: string | null; type: string } | undefined;
-  const reviewed = !!db().prepare("SELECT 1 FROM reviews WHERE order_id = ?").get(o.id);
+  const reviewed = !!await db().prepare("SELECT 1 FROM reviews WHERE order_id = ?").get(o.id);
   const stepIdx = STEPS.indexOf(o.status as (typeof STEPS)[number]);
   const m = (v: number) => money(v, cur, locale);
 

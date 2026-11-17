@@ -7,14 +7,14 @@ import { Estimator } from "@/components/site/Estimator";
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
-  return { title: getSiteDict(locale).site.estimate.title };
+  return { title: (await getSiteDict(locale)).site.estimate.title };
 }
 
 export default async function EstimatePage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const t = getSiteDict(locale);
-  const s = getSettings();
-  const prices = getPrices().filter((p) => p.on_site && p.price > 0);
+  const t = (await getSiteDict(locale));
+  const s = (await getSettings());
+  const prices = (await getPrices()).filter((p) => p.on_site && p.price > 0);
   // Only offer products that have at least one public price
   const products = SITE_PRODUCTS.filter((k) => prices.some((p) => p.product_type === k)).map((k) => [k, t.products[k]] as [string, string]);
   const cur = s.currency || "IQD";

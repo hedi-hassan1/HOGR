@@ -9,15 +9,15 @@ export default async function PrintOrder({ params, searchParams }: { params: Pro
   const { doc } = await searchParams;
   const t = getDict(locale);
   const a = t.admin;
-  const s = getSettings(locale);
+  const s = (await getSettings(locale));
   const cur = s.currency;
-  const o = db().prepare("SELECT o.*, c.name cname, c.phone cphone, c.address caddress FROM orders o JOIN clients c ON c.id = o.client_id WHERE o.id = ?").get(Number(id)) as
+  const o = await db().prepare("SELECT o.*, c.name cname, c.phone cphone, c.address caddress FROM orders o JOIN clients c ON c.id = o.client_id WHERE o.id = ?").get(Number(id)) as
     | { id: number; cname: string; cphone: string | null; caddress: string | null; title: string | null; discount: number; due_date: string | null; notes: string | null; created_at: string }
     | undefined;
   if (!o) notFound();
-  const items = db().prepare("SELECT * FROM order_items WHERE order_id = ? ORDER BY sort, id").all(o.id) as OrderItem[];
-  const pays = db().prepare("SELECT * FROM payments WHERE order_id = ? ORDER BY date, id").all(o.id) as { id: number; amount: number; method: string; date: string }[];
-  const tt = orderTotals(o.id);
+  const items = await db().prepare("SELECT * FROM order_items WHERE order_id = ? ORDER BY sort, id").all(o.id) as OrderItem[];
+  const pays = await db().prepare("SELECT * FROM payments WHERE order_id = ? ORDER BY date, id").all(o.id) as { id: number; amount: number; method: string; date: string }[];
+  const tt = (await orderTotals(o.id));
   const isInvoice = doc === "invoice";
   const m = (v: number) => money(v, cur, locale);
 

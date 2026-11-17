@@ -5,13 +5,13 @@ export type PortfolioRow = {
   category: string; image: string; featured: number; sort: number; before_image: string | null;
 };
 
-export function getPortfolio(opts: { category?: string; featured?: boolean } = {}) {
+export async function getPortfolio(opts: { category?: string; featured?: boolean } = {}) {
   const where: string[] = [];
   const args: unknown[] = [];
   if (opts.category) { where.push("category = ?"); args.push(opts.category); }
   if (opts.featured) where.push("featured = 1");
   const sql = `SELECT * FROM portfolio ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY sort, id DESC`;
-  return db().prepare(sql).all(...args) as PortfolioRow[];
+  return await db().prepare(sql).all(...args) as PortfolioRow[];
 }
 
 export function titleFor(p: PortfolioRow, locale: string) {
@@ -20,8 +20,8 @@ export function titleFor(p: PortfolioRow, locale: string) {
 }
 
 /** First portfolio image per category, used as the product thumbnail. */
-export function categoryCovers() {
-  const rows = db().prepare("SELECT category, image FROM portfolio ORDER BY featured DESC, sort, id").all() as { category: string; image: string }[];
+export async function categoryCovers() {
+  const rows = await db().prepare("SELECT category, image FROM portfolio ORDER BY featured DESC, sort, id").all() as { category: string; image: string }[];
   const map: Record<string, string> = {};
   for (const r of rows) if (!map[r.category]) map[r.category] = r.image;
   return map;

@@ -9,12 +9,12 @@ export default async function PrintMeasurement({ params }: { params: Promise<{ l
   const { locale, id } = await params;
   const t = getDict(locale);
   const a = t.admin;
-  const s = getSettings(locale);
-  const m = db().prepare("SELECT m.*, c.name cname, c.phone cphone FROM measurements m JOIN clients c ON c.id = m.client_id WHERE m.id = ?").get(Number(id)) as
+  const s = (await getSettings(locale));
+  const m = await db().prepare("SELECT m.*, c.name cname, c.phone cphone FROM measurements m JOIN clients c ON c.id = m.client_id WHERE m.id = ?").get(Number(id)) as
     | { id: number; cname: string; cphone: string | null; title: string | null; address: string | null; taken_by: string | null; date: string | null; notes: string | null }
     | undefined;
   if (!m) notFound();
-  const items = db().prepare("SELECT * FROM measurement_items WHERE measurement_id = ? ORDER BY sort, id").all(m.id) as { product_type: string; room: string | null; width: number | null; height: number | null; depth: number | null; qty: number; material: string | null; color: string | null; notes: string | null; photo: string | null }[];
+  const items = await db().prepare("SELECT * FROM measurement_items WHERE measurement_id = ? ORDER BY sort, id").all(m.id) as { product_type: string; room: string | null; width: number | null; height: number | null; depth: number | null; qty: number; material: string | null; color: string | null; notes: string | null; photo: string | null }[];
 
   return (
     <PrintSheet

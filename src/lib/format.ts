@@ -36,10 +36,17 @@ export function dateFmt(iso: string | null | undefined, locale = "en") {
   return `${d} ${monthName(m - 1, locale)} ${y}`;
 }
 
+/** The business runs on Kurdistan time; online servers run on UTC, so dates are computed in this zone. */
+export const BUSINESS_TZ = process.env.HOGR_TZ || "Asia/Baghdad";
+
+export function nowLocal() {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+  const g = (t: string) => parts.find((p) => p.type === t)?.value || "00";
+  return { date: `${g("year")}-${g("month")}-${g("day")}`, hour: Number(g("hour")), day: Number(g("day")) };
+}
+
 export function todayISO() {
-  const d = new Date();
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+  return nowLocal().date;
 }
 
 export function addDaysISO(iso: string, days: number) {

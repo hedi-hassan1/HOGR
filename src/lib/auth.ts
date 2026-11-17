@@ -12,7 +12,7 @@ export type User = { id: number; name: string; username: string; role: "admin" |
 export async function createSession(userId: number) {
   const token = crypto.randomBytes(32).toString("hex");
   const expires = new Date(Date.now() + SESSION_DAYS * 86400_000);
-  db().prepare("INSERT INTO sessions(token, user_id, expires_at) VALUES (?,?,?)").run(token, userId, expires.toISOString());
+  await db().prepare("INSERT INTO sessions(token, user_id, expires_at) VALUES (?,?,?)").run(token, userId, expires.toISOString());
   (await cookies()).set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
@@ -25,8 +25,7 @@ export async function createSession(userId: number) {
 export async function getUser(): Promise<User | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  const row = db()
-    .prepare(
+  const row = await db().prepare(
       "SELECT u.id, u.name, u.username, u.role, s.expires_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?",
     )
     .get(token) as (User & { expires_at: string }) | undefined;
@@ -43,6 +42,6 @@ export async function requireUser(locale = "ckb"): Promise<User> {
 export async function destroySession() {
   const c = await cookies();
   const token = c.get(SESSION_COOKIE)?.value;
-  if (token) db().prepare("DELETE FROM sessions WHERE token = ?").run(token);
+  if (token) await db().prepare("DELETE FROM sessions WHERE token = ?").run(token);
   c.delete(SESSION_COOKIE);
 }

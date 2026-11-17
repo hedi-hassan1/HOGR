@@ -15,13 +15,13 @@ export default async function MaterialsPage({ params }: { params: Promise<{ loca
   const a = t.admin;
   const L = a.materials;
   const base = `/${locale}/admin`;
-  const o = db().prepare("SELECT o.id, o.title, o.materials_taken_at, c.name cname FROM orders o JOIN clients c ON c.id = o.client_id WHERE o.id = ?").get(Number(id)) as
+  const o = await db().prepare("SELECT o.id, o.title, o.materials_taken_at, c.name cname FROM orders o JOIN clients c ON c.id = o.client_id WHERE o.id = ?").get(Number(id)) as
     | { id: number; title: string | null; materials_taken_at: string | null; cname: string }
     | undefined;
   if (!o) notFound();
-  const items = db().prepare("SELECT product_type, width, height, qty FROM order_items WHERE order_id = ?").all(o.id) as Pick<OrderItem, "product_type" | "width" | "height" | "qty">[];
+  const items = await db().prepare("SELECT product_type, width, height, qty FROM order_items WHERE order_id = ?").all(o.id) as Pick<OrderItem, "product_type" | "width" | "height" | "qty">[];
   const lines = computeMaterials(items);
-  const inventory = db().prepare("SELECT id, name, category, quantity, unit FROM inventory ORDER BY name").all() as { id: number; name: string; category: string | null; quantity: number; unit: string | null }[];
+  const inventory = await db().prepare("SELECT id, name, category, quantity, unit FROM inventory ORDER BY name").all() as { id: number; name: string; category: string | null; quantity: number; unit: string | null }[];
 
   return (
     <>

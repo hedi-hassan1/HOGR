@@ -7,8 +7,8 @@ export const dynamic = "force-dynamic";
 
 export default async function SiteLayout({ children, params }: { children: React.ReactNode; params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const t = getSiteDict(locale);
-  const s = getSettings(locale);
+  const t = (await getSiteDict(locale));
+  const s = (await getSettings(locale));
   return (
     <>
       <Header locale={locale} nav={t.site.nav} />

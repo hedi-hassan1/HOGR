@@ -19,17 +19,17 @@ export default async function BookingsPage({ params, searchParams }: { params: P
   const tab = sp.tab === "past" ? "past" : "upcoming";
 
   const sel = "SELECT b.*, c.name cname, c.phone cphone, c.address caddress, w.name wname FROM bookings b LEFT JOIN clients c ON c.id = b.client_id LEFT JOIN workers w ON w.id = b.worker_id";
-  const workers = getWorkers(true);
+  const workers = (await getWorkers(true));
   const backTo = sp.back && sp.back.startsWith(`/${locale}/admin/`) ? sp.back : undefined;
   const rows = (
     tab === "upcoming"
-      ? db().prepare(`${sel} WHERE b.status = 'scheduled' ORDER BY b.date, b.time`).all()
-      : db().prepare(`${sel} WHERE b.status != 'scheduled' ORDER BY b.date DESC, b.time DESC LIMIT 200`).all()
+      ? await db().prepare(`${sel} WHERE b.status = 'scheduled' ORDER BY b.date, b.time`).all()
+      : await db().prepare(`${sel} WHERE b.status != 'scheduled' ORDER BY b.date DESC, b.time DESC LIMIT 200`).all()
   ) as B[];
-  const counts = db().prepare("SELECT SUM(status='scheduled') up, SUM(status!='scheduled') past FROM bookings").get() as { up: number; past: number };
+  const counts = await db().prepare("SELECT SUM(status='scheduled') up, SUM(status!='scheduled') past FROM bookings").get() as { up: number; past: number };
 
-  const editing = sp.edit ? (db().prepare(`${sel} WHERE b.id = ?`).get(Number(sp.edit)) as B | undefined) : undefined;
-  const clients = db().prepare("SELECT id, name FROM clients ORDER BY name").all() as { id: number; name: string }[];
+  const editing = sp.edit ? (await db().prepare(`${sel} WHERE b.id = ?`).get(Number(sp.edit)) as B | undefined) : undefined;
+  const clients = await db().prepare("SELECT id, name FROM clients ORDER BY name").all() as { id: number; name: string }[];
   const showForm = !!editing || sp.new === "1";
 
   // Group by date

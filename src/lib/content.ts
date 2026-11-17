@@ -148,17 +148,17 @@ const ALLOWED = new Set(SECTIONS.flatMap((s) => s.fields.map((f) => f.path)));
 export const isEditablePath = (p: string) => ALLOWED.has(p);
 
 /** The dictionary with the owner's edits applied. Use for the public website. */
-export function getSiteDict(locale: string): Dict {
+export async function getSiteDict(locale: string): Promise<Dict> {
   const base = getDict(locale);
-  const rows = db().prepare("SELECT path, value FROM site_content WHERE locale = ?").all(locale) as { path: string; value: string }[];
+  const rows = await db().prepare("SELECT path, value FROM site_content WHERE locale = ?").all(locale) as { path: string; value: string }[];
   if (rows.length === 0) return base;
   const copy = structuredClone(base) as unknown as Record<string, unknown>;
   for (const r of rows) if (ALLOWED.has(r.path)) setAt(copy, r.path, r.value);
   return copy as unknown as Dict;
 }
 
-export function getOverrides(): Map<string, string> {
-  const rows = db().prepare("SELECT path, locale, value FROM site_content").all() as { path: string; locale: string; value: string }[];
+export async function getOverrides(): Promise<Map<string, string>> {
+  const rows = await db().prepare("SELECT path, locale, value FROM site_content").all() as { path: string; locale: string; value: string }[];
   return new Map(rows.map((r) => [`${r.path}|${r.locale}`, r.value]));
 }
 
@@ -170,13 +170,13 @@ export type Faq = { id: number; q_ckb: string | null; q_ar: string | null; q_en:
 const pick = (row: Record<string, unknown>, field: string, locale: string) =>
   (row[`${field}_${locale}`] as string) || (row[`${field}_en`] as string) || (row[`${field}_ckb`] as string) || "";
 
-export function getTestimonials(locale: string, all = false) {
-  const rows = db().prepare(`SELECT * FROM testimonials ${all ? "" : "WHERE visible = 1"} ORDER BY sort, id`).all() as Testimonial[];
+export async function getTestimonials(locale: string, all = false) {
+  const rows = await db().prepare(`SELECT * FROM testimonials ${all ? "" : "WHERE visible = 1"} ORDER BY sort, id`).all() as Testimonial[];
   return all ? rows : rows.map((r) => ({ id: r.id, name: pick(r, "name", locale), role: pick(r, "role", locale), text: pick(r, "text", locale), rating: (r as Testimonial & { rating?: number | null }).rating ?? null })).filter((r) => r.text);
 }
 
-export function getFaqs(locale: string, all = false) {
-  const rows = db().prepare(`SELECT * FROM faqs ${all ? "" : "WHERE visible = 1"} ORDER BY sort, id`).all() as Faq[];
+export async function getFaqs(locale: string, all = false) {
+  const rows = await db().prepare(`SELECT * FROM faqs ${all ? "" : "WHERE visible = 1"} ORDER BY sort, id`).all() as Faq[];
   return all ? rows : rows.map((r) => ({ id: r.id, q: pick(r, "q", locale), a: pick(r, "a", locale) })).filter((r) => r.q);
 }
 
@@ -184,8 +184,8 @@ export const IMAGE_SLOTS = ["hero", "about", "owner", "login"] as const;
 export const SECTION_TOGGLES = ["products", "process", "featured", "reviews", "booking", "faq", "owner", "map"] as const;
 
 /** Website images and on/off switches for page sections. */
-export function getSiteConfig() {
-  const s = getSettings();
+export async function getSiteConfig() {
+  const s = (await getSettings());
   const covers: Record<string, string> = {};
   for (const k of PRODUCTS) if (s[`cover_${k}`]) covers[k] = s[`cover_${k}`];
   return {

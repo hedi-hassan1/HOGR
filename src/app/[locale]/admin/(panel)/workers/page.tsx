@@ -17,21 +17,20 @@ export default async function WorkersPage({ params, searchParams }: { params: Pr
   const a = getDict(locale).admin;
   const L = a.workers;
   const base = `/${locale}/admin`;
-  const cur = getSettings().currency;
+  const cur = (await getSettings()).currency;
   const today = todayISO();
   const month = sp.m && /^\d{4}-\d{2}$/.test(sp.m) ? sp.m : monthOf(today);
   const { start, end, days: nDays } = monthRange(month);
   const days = Array.from({ length: nDays }, (_, i) => addDaysISO(start, i));
   const fridays = days.filter((d) => new Date(d + "T00:00:00Z").getUTCDay() === 5);
 
-  const all = getWorkers();
+  const all = (await getWorkers());
   const active = all.filter((w) => w.active);
-  const summary = wageSummary(month);
-  const att = getAttendance(month);
+  const summary = (await wageSummary(month));
+  const att = (await getAttendance(month));
   const editing = sp.edit ? all.find((w) => w.id === Number(sp.edit)) : undefined;
   const showForm = !!editing || sp.new === "1" || all.length === 0;
-  const pays = db()
-    .prepare("SELECT p.*, w.name wname FROM worker_payments p JOIN workers w ON w.id = p.worker_id WHERE p.date BETWEEN ? AND ? ORDER BY p.date DESC, p.id DESC")
+  const pays = await db().prepare("SELECT p.*, w.name wname FROM worker_payments p JOIN workers w ON w.id = p.worker_id WHERE p.date BETWEEN ? AND ? ORDER BY p.date DESC, p.id DESC")
     .all(start, end) as { id: number; worker_id: number; wname: string; kind: string; amount: number; date: string; note: string | null }[];
   const here = `${base}/workers?m=${month}`;
 

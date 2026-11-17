@@ -36,9 +36,9 @@ export default async function ReportsPage({ params, searchParams }: { params: Pr
   const a = t.admin;
   const L = a.reports;
   const base = `/${locale}/admin`;
-  const cur = getSettings().currency || "IQD";
+  const cur = (await getSettings()).currency || "IQD";
   const month = sp.month && /^\d{4}-\d{2}$/.test(sp.month) ? sp.month : monthOf(todayISO());
-  const r = monthReport(month);
+  const r = (await monthReport(month));
 
   return (
     <>

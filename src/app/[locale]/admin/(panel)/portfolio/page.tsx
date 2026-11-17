@@ -1,3 +1,4 @@
+import { ImageInput } from "@/components/admin/ImageInput";
 import { getDict, PRODUCT_TYPES } from "@/lib/i18n";
 import { getPortfolio } from "@/lib/site";
 import { Empty, Field, Hidden, PageHeader, Panel, Select } from "@/components/admin/ui";
@@ -8,7 +9,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ loca
   const { locale } = await params;
   const t = getDict(locale);
   const a = t.admin;
-  const items = getPortfolio();
+  const items = (await getPortfolio());
   const cats = PRODUCT_TYPES.map((k) => [k, t.products[k]] as [string, string]);
 
   return (
@@ -17,7 +18,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ loca
       <Panel title={a.portfolio.upload} className="mb-6">
         <form action={uploadPortfolio} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Hidden values={{ locale }} />
-          <Field label={a.portfolio.image} className="sm:col-span-2"><input type="file" name="image" accept="image/jpeg,image/png,image/webp" multiple required className="input py-2" /><span className="mt-1 block text-xs text-muted">{a.website.multi}</span></Field>
+          <Field label={a.portfolio.image} className="sm:col-span-2"><ImageInput name="image" multiple required className="input py-2" /><span className="mt-1 block text-xs text-muted">{a.website.multi}</span></Field>
           <Field label={a.common.category}><Select name="category" defaultValue="door" options={cats} /></Field>
           <label className="flex items-end gap-2 pb-2.5"><input type="checkbox" name="featured" className="h-4 w-4 accent-graphite" /> {a.portfolio.featured}</label>
           <Field label={a.portfolio.titleCkb}><input name="title_ckb" dir="rtl" className="input" /></Field>
@@ -57,7 +58,7 @@ export default async function PortfolioPage({ params }: { params: Promise<{ loca
               <form action={setBeforeImage} className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-3">
                 <Hidden values={{ locale, id: p.id }} />
                 <span className="text-xs text-muted">{t.site.ba.before}:</span>
-                <input type="file" name="before" accept="image/jpeg,image/png,image/webp" className="min-w-0 flex-1 text-xs" />
+                <ImageInput name="before" className="min-w-0 flex-1 text-xs" />
                 <SubmitButton className="btn btn-ghost btn-sm">{a.website.images.save}</SubmitButton>
               </form>
               {p.before_image && (

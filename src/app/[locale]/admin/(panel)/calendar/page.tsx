@@ -53,13 +53,12 @@ export default async function CalendarPage({ params, searchParams }: { params: P
   const days = Array.from({ length: 7 }, (_, i) => addDaysISO(start, i));
   const here = `${base}/calendar?w=${start}`;
 
-  const bookings = db()
-    .prepare(
+  const bookings = await db().prepare(
       `SELECT b.*, c.name cname, c.address caddress FROM bookings b LEFT JOIN clients c ON c.id = b.client_id
        WHERE b.date BETWEEN ? AND ? AND b.status != 'cancelled' ORDER BY b.date, b.time`,
     )
     .all(days[0], days[6]) as B[];
-  const workers = getWorkers(true);
+  const workers = (await getWorkers(true));
   const rows: { id: number | null; name: string }[] = [...workers.map((w) => ({ id: w.id as number | null, name: w.name })), { id: null, name: L.unassigned }];
 
   const cell = (wid: number | null, day: string) => bookings.filter((b) => (b.worker_id ?? null) === wid && b.date === day);

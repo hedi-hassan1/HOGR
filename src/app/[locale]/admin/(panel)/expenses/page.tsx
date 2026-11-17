@@ -13,18 +13,18 @@ export default async function ExpensesPage({ params, searchParams }: { params: P
   const sp = await searchParams;
   const a = getDict(locale).admin;
   const base = `/${locale}/admin`;
-  const cur = getSettings().currency;
+  const cur = (await getSettings()).currency;
   const from = sp.from || todayISO().slice(0, 8) + "01";
   const to = sp.to || todayISO();
 
   const args: unknown[] = [from, to];
   let where = "date >= ? AND date <= ?";
   if (sp.cat) { where += " AND category = ?"; args.push(sp.cat); }
-  const rows = db().prepare(`SELECT * FROM expenses WHERE ${where} ORDER BY date DESC, id DESC`).all(...args) as E[];
+  const rows = await db().prepare(`SELECT * FROM expenses WHERE ${where} ORDER BY date DESC, id DESC`).all(...args) as E[];
   const total = rows.reduce((s, r) => s + r.amount, 0);
   const byCat = EXPENSE_CATS.map((c) => ({ c, v: rows.filter((r) => r.category === c).reduce((s, r) => s + r.amount, 0) })).filter((x) => x.v > 0);
-  const editing = sp.edit ? (db().prepare("SELECT * FROM expenses WHERE id = ?").get(Number(sp.edit)) as E | undefined) : undefined;
-  const orders = db().prepare("SELECT o.id, c.name FROM orders o JOIN clients c ON c.id = o.client_id WHERE o.status NOT IN ('cancelled') ORDER BY o.id DESC LIMIT 200").all() as { id: number; name: string }[];
+  const editing = sp.edit ? (await db().prepare("SELECT * FROM expenses WHERE id = ?").get(Number(sp.edit)) as E | undefined) : undefined;
+  const orders = await db().prepare("SELECT o.id, c.name FROM orders o JOIN clients c ON c.id = o.client_id WHERE o.status NOT IN ('cancelled') ORDER BY o.id DESC LIMIT 200").all() as { id: number; name: string }[];
 
   return (
     <>

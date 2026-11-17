@@ -7,7 +7,7 @@ import { BookingForm } from "@/components/site/BookingForm";
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
-  return { title: getSiteDict(locale).site.contact.title };
+  return { title: (await getSiteDict(locale)).site.contact.title };
 }
 
 const MAP =
@@ -16,9 +16,9 @@ const MAP =
 export default async function ContactPage({ params, searchParams }: { params: Promise<{ locale: string }>; searchParams: Promise<{ service?: string; msg?: string }> }) {
   const { locale } = await params;
   const sp = await searchParams;
-  const t = getSiteDict(locale);
+  const t = (await getSiteDict(locale));
   const c = t.site.contact;
-  const s = getSettings(locale);
+  const s = (await getSettings(locale));
 
   const rows = [
     { icon: Phone, label: c.call, value: [s.phone1, s.phone2].filter(Boolean), href: (v: string) => `tel:${v.replace(/\s/g, "")}`, ltr: true },
@@ -58,7 +58,7 @@ export default async function ContactPage({ params, searchParams }: { params: Pr
           </div>
         </div>
       </section>
-      {getSiteConfig().show.map && <iframe src={MAP} title={c.location} className="block h-[420px] w-full border-0 grayscale-[60%]" loading="lazy" referrerPolicy="no-referrer-when-downgrade" />}
+      {(await getSiteConfig()).show.map && <iframe src={MAP} title={c.location} className="block h-[420px] w-full border-0 grayscale-[60%]" loading="lazy" referrerPolicy="no-referrer-when-downgrade" />}
     </>
   );
 }

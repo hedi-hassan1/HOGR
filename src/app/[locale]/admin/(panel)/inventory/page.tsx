@@ -14,8 +14,8 @@ export default async function InventoryPage({ params, searchParams }: { params: 
   const sp = await searchParams;
   const a = getDict(locale).admin;
   const base = `/${locale}/admin`;
-  const cur = getSettings().currency;
-  const rows = db().prepare("SELECT * FROM inventory ORDER BY (quantity <= min_quantity AND min_quantity > 0) DESC, category, name").all() as I[];
+  const cur = (await getSettings()).currency;
+  const rows = await db().prepare("SELECT * FROM inventory ORDER BY (quantity <= min_quantity AND min_quantity > 0) DESC, category, name").all() as I[];
   const editing = sp.edit ? rows.find((r) => r.id === Number(sp.edit)) : undefined;
   const value = rows.reduce((s, r) => s + r.quantity * (r.cost || 0), 0);
   const showForm = !!editing || sp.new === "1";

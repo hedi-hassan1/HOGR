@@ -8,14 +8,14 @@ import { BookingForm } from "@/components/site/BookingForm";
 
 export default async function Home({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const t = getSiteDict(locale);
-  const cfg = getSiteConfig();
-  const reviews = getTestimonials(locale) as { id: number; name: string; role: string; text: string; rating: number | null }[];
+  const t = (await getSiteDict(locale));
+  const cfg = (await getSiteConfig());
+  const reviews = (await getTestimonials(locale)) as { id: number; name: string; role: string; text: string; rating: number | null }[];
   const q = locale === "en" ? ["“", "”"] : ["«", "»"];
   const sep = locale === "en" ? ", " : "، ";
-  const s = getSettings(locale);
-  const covers = { ...categoryCovers(), ...cfg.covers };
-  const featured = getPortfolio({ featured: true }).slice(0, 8);
+  const s = (await getSettings(locale));
+  const covers = { ...(await categoryCovers()), ...cfg.covers };
+  const featured = (await getPortfolio({ featured: true })).slice(0, 8);
   const heroImg = cfg.images.hero || "/images/work/darga4.jpg";
 
   return (

@@ -10,17 +10,17 @@ export default async function ClientsPage({ params, searchParams }: { params: Pr
   const sp = await searchParams;
   const a = getDict(locale).admin;
   const base = `/${locale}/admin`;
-  const cur = getSettings().currency;
+  const cur = (await getSettings()).currency;
   const q = (sp.q || "").trim();
 
   const rows = (
     q
-      ? db().prepare("SELECT * FROM clients WHERE name LIKE ? OR replace(phone,' ','') LIKE ? OR replace(phone2,' ','') LIKE ? ORDER BY id DESC").all(`%${q}%`, `%${q.replace(/\s/g, "")}%`, `%${q.replace(/\s/g, "")}%`)
-      : db().prepare("SELECT * FROM clients ORDER BY id DESC").all()
+      ? await db().prepare("SELECT * FROM clients WHERE name LIKE ? OR replace(phone,' ','') LIKE ? OR replace(phone2,' ','') LIKE ? ORDER BY id DESC").all(`%${q}%`, `%${q.replace(/\s/g, "")}%`, `%${q.replace(/\s/g, "")}%`)
+      : await db().prepare("SELECT * FROM clients ORDER BY id DESC").all()
   ) as ClientRow[];
 
-  const totals = allOrderTotals();
-  const orders = db().prepare("SELECT id, client_id, status FROM orders").all() as { id: number; client_id: number; status: string }[];
+  const totals = (await allOrderTotals());
+  const orders = await db().prepare("SELECT id, client_id, status FROM orders").all() as { id: number; client_id: number; status: string }[];
   const byClient = new Map<number, { n: number; bal: number }>();
   for (const o of orders) {
     const m = byClient.get(o.client_id) || { n: 0, bal: 0 };

@@ -143,22 +143,54 @@ Changes appear on the website immediately.
 5. Print the **quote**, move the order through the stages (quote → confirmed → in production → ready → installed → completed), and record **payments** (cash, bank transfer, FIB, FastPay, ZainCash). Balances update everywhere.
 6. Record **expenses** and keep **inventory** levels; the dashboard shows the month's income, expenses, net, money still owed, and low stock.
 
-## Putting it online
+## Putting it online (Vercel)
 
-The app needs a server that keeps files between restarts, because the database is a file. Good options:
+The same code runs on this computer and on Vercel:
 
-- A small VPS (Hetzner, DigitalOcean, etc.): `npm run build && npm start` behind Nginx with HTTPS, kept running with `pm2` or systemd.
-- Railway or Render with a **persistent volume** mounted, setting `HOGR_DATA_DIR` to the volume path.
+| | On this computer | On Vercel |
+| --- | --- | --- |
+| Database | `data/hogr.db` (SQLite file) | **Turso** (SQLite-compatible cloud database) |
+| Photos you upload | `data/uploads/` | **Vercel Blob** |
+| Reminders, debt alerts, monthly report, backup | every 15 minutes while running | once a day at 09:00 Kurdistan time (Vercel Cron, `vercel.json`) |
 
-Serverless hosts such as Vercel or Netlify will **not** keep the database, so don't use them for this app.
+### One-time setup
 
-Environment variables:
+1. **Import the project**: vercel.com → *Add New → Project* → import the GitHub repository `HOGR`. Framework: Next.js (detected automatically). Deploy.
+2. **Database**: in the project, open **Storage → Create Database → Turso** and connect it to the project. This adds `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`.
+   If Turso isn't listed, create a free database at turso.tech (region: Frankfurt) and add those two variables yourself under **Settings → Environment Variables**.
+3. **Photos**: **Storage → Create → Blob** (public), connect it to the project. This adds `BLOB_READ_WRITE_TOKEN`.
+4. **Environment variables** (Settings → Environment Variables):
+   - `HOGR_ADMIN_PASSWORD`: the first admin password (only used when the database is new)
+   - `CRON_SECRET`: any long random text (protects the daily job)
+   - `HOGR_SITE_URL`: the address once you have a domain, e.g. `https://hogrco.com`
+5. **Redeploy** (Deployments → ⋯ → Redeploy). Open the site, then `/admin` and log in as `admin`.
+
+The tables, starter prices, FAQ and portfolio are created automatically on the first visit. Every push to GitHub deploys again.
+
+**Optional, sample data online:** `TURSO_DATABASE_URL=... TURSO_AUTH_TOKEN=... npm run demo`.
+
+### Domain
+
+Vercel → project → **Settings → Domains** → add your domain and follow the DNS steps (with Cloudflare DNS, set the record to *DNS only*). Then set `HOGR_SITE_URL` and `Settings → Website address` in the admin to the new address.
+
+### Limits to know
+
+- Photos are shrunk in the browser before upload (online uploads are limited to about 4 MB each).
+- Online, backups are handled by Turso (automatic, with point-in-time restore). **Settings → Download backup** gives you a full JSON copy at any time.
+
+### Other hosts
+
+Any Node.js server also works (`npm run build && npm start`), with or without Turso. Without `TURSO_DATABASE_URL` it uses the local file in `HOGR_DATA_DIR` (default `./data`), so that folder must be kept between restarts.
 
 | Variable | Purpose |
 | --- | --- |
-| `HOGR_SITE_URL` | The public address, e.g. `https://hogrcompany.com` (used for link-preview images) |
-| `HOGR_DATA_DIR` | Where the database and uploads live (default `./data`) |
-| `HOGR_ADMIN_PASSWORD` | Password for the first admin account (first start only) |
+| `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | Cloud database (required on Vercel) |
+| `BLOB_READ_WRITE_TOKEN` | Photo storage on Vercel (added by Vercel Blob) |
+| `HOGR_ADMIN_PASSWORD` | Password for the first admin account (new database only) |
+| `CRON_SECRET` | Protects `/api/cron` |
+| `HOGR_SITE_URL` | Public address, used in links sent to clients and in link previews |
+| `HOGR_DATA_DIR` | Local database and uploads folder (default `./data`) |
+| `HOGR_TZ` | Business time zone (default `Asia/Baghdad`) |
 | `HOGR_INSECURE_COOKIE=1` | Only for testing a production build over plain `http://` on a non-localhost address |
 
 ## Backups

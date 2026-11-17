@@ -5,6 +5,7 @@ import { Badge, Field, Hidden, PageHeader, Panel, Select } from "@/components/ad
 import { ConfirmButton, SubmitButton } from "@/components/admin/client";
 import { backupNow } from "../../actions";
 import { listBackups } from "@/lib/extras";
+import { IS_CLOUD } from "@/lib/db";
 import { addUser, deleteUser, removePushDevice, saveNotifySettings, saveSettings, sendRemindersNow, testPush } from "../../actions";
 import { PushSetup } from "@/components/admin/Pwa";
 import { getVapid, listSubscriptions } from "@/lib/push";
@@ -17,13 +18,13 @@ export default async function SettingsPage({ params, searchParams }: { params: P
   const sp = await searchParams;
   const user = await requireUser(locale);
   const a = getDict(locale).admin;
-  const s = getSettings();
-  const users = db().prepare("SELECT id, name, username, role FROM users ORDER BY id").all() as { id: number; name: string; username: string; role: "admin" | "staff" }[];
+  const s = (await getSettings());
+  const users = await db().prepare("SELECT id, name, username, role FROM users ORDER BY id").all() as { id: number; name: string; username: string; role: "admin" | "staff" }[];
   const isAdmin = user.role === "admin";
   const fu = a.followup;
-  const devices = listSubscriptions();
+  const devices = (await listSubscriptions());
   const backups = listBackups();
-  const vapidKey = getVapid().publicKey;
+  const vapidKey = (await getVapid()).publicKey;
   const n = sp.notify || "";
   const notifyMsg: { ok: boolean; text: string } | null =
     n === "saved" ? { ok: true, text: a.common.saved }
@@ -60,10 +61,10 @@ export default async function SettingsPage({ params, searchParams }: { params: P
                 <input name="site_url" dir="ltr" defaultValue={s.site_url} placeholder="https://hogrco.com" className="input" />
                 <span className="mt-1 block text-xs text-muted">{a.siteUrlHint}</span>
               </Field>
-              <Field label={a.backup.dir} className="sm:col-span-2">
+              {!IS_CLOUD && <Field label={a.backup.dir} className="sm:col-span-2">
                 <input name="backup_dir" dir="ltr" defaultValue={s.backup_dir} placeholder="E:\HOGR-backups" className="input" />
                 <span className="mt-1 block text-xs text-muted">{a.backup.dirHint}</span>
-              </Field>
+              </Field>}
               <div className="sm:col-span-2"><SubmitButton>{a.common.save}</SubmitButton></div>
             </fieldset>
           </form>
@@ -76,15 +77,15 @@ export default async function SettingsPage({ params, searchParams }: { params: P
         <section id="backup" className="scroll-mt-20 rounded-xl border border-line bg-white">
           <h2 className="border-b border-line px-5 py-3.5 font-semibold">{a.backup.title}</h2>
           <div className="p-5">
-            <p className="text-muted">{a.backup.text}</p>
+            <p className="text-muted">{IS_CLOUD ? a.backup.cloud : a.backup.text}</p>
             <p className="mt-2 text-sm">{a.backup.last}: <b>{s.backup_last ? dateFmt(s.backup_last, locale) : "—"}</b></p>
             {sp.backup && <p role="status" className="mt-2"><Badge tone={sp.backup === "ok" ? "green" : "amber"}>{sp.backup === "ok" ? a.backup.done : a.backup.failed}</Badge></p>}
             <div className="mt-4 flex flex-wrap gap-2">
-              {isAdmin && <form action={backupNow}><Hidden values={{ locale }} /><SubmitButton className="btn btn-primary btn-sm">{a.backup.now}</SubmitButton></form>}
+              {isAdmin && !IS_CLOUD && <form action={backupNow}><Hidden values={{ locale }} /><SubmitButton className="btn btn-primary btn-sm">{a.backup.now}</SubmitButton></form>}
               <a href="/api/backup" className="btn btn-ghost btn-sm">{a.settings.download}</a>
             </div>
-            <h3 className="mb-2 mt-5 text-sm font-semibold">{a.backup.list}</h3>
-            {backups.length === 0 ? <p className="text-sm text-muted">{a.backup.none}</p> : (
+            {!IS_CLOUD && <h3 className="mb-2 mt-5 text-sm font-semibold">{a.backup.list}</h3>}
+            {IS_CLOUD ? null : backups.length === 0 ? <p className="text-sm text-muted">{a.backup.none}</p> : (
               <ul className="max-h-48 divide-y divide-[#eceae6] overflow-y-auto rounded-lg border border-line text-sm">
                 {backups.map((b) => (
                   <li key={b.file} className="flex items-center justify-between gap-3 px-3 py-1.5">

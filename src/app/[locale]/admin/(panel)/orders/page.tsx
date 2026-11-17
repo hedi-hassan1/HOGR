@@ -11,15 +11,14 @@ export default async function OrdersPage({ params, searchParams }: { params: Pro
   const sp = await searchParams;
   const a = getDict(locale).admin;
   const base = `/${locale}/admin`;
-  const cur = getSettings().currency;
+  const cur = (await getSettings()).currency;
   const status = sp.status && (ORDER_STATUSES as readonly string[]).includes(sp.status) ? sp.status : "open";
 
-  const all = db()
-    .prepare("SELECT o.*, c.name cname FROM orders o JOIN clients c ON c.id = o.client_id ORDER BY o.id DESC")
+  const all = await db().prepare("SELECT o.*, c.name cname FROM orders o JOIN clients c ON c.id = o.client_id ORDER BY o.id DESC")
     .all() as { id: number; client_id: number; cname: string; title: string | null; status: string; due_date: string | null; created_at: string }[];
   const rows = status === "open" ? all.filter((o) => !["completed", "cancelled"].includes(o.status)) : all.filter((o) => o.status === status);
-  const totals = allOrderTotals();
-  const clients = db().prepare("SELECT id, name FROM clients ORDER BY name").all() as { id: number; name: string }[];
+  const totals = (await allOrderTotals());
+  const clients = await db().prepare("SELECT id, name FROM clients ORDER BY name").all() as { id: number; name: string }[];
   const today = todayISO();
 
   const tabs = [

@@ -10,11 +10,11 @@ const vazir = Vazirmatn({ subsets: ["arabic", "latin"], variable: "--font-vazir"
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
-  const t = getSiteDict(locale);
+  const t = (await getSiteDict(locale));
   return {
     title: { default: `HOGR CO. | ${t.site.hero.title}`, template: "%s | HOGR CO." },
     description: t.site.hero.sub,
-    metadataBase: new URL(process.env.HOGR_SITE_URL || "http://localhost:3000"),
+    metadataBase: new URL(process.env.HOGR_SITE_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000")),
     icons: { icon: "/icon.svg", apple: `/${locale}/apple-icon` },
     alternates: { languages: Object.fromEntries(LOCALES.map((l) => [l, `/${l}`])) },
   };

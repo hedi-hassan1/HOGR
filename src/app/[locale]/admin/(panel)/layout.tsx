@@ -13,9 +13,9 @@ export default async function PanelLayout({ children, params }: { children: Reac
   const { locale } = await params;
   const user = await requireUser(locale);
   const t = getDict(locale);
-  const newLeads = (db().prepare("SELECT COUNT(*) c FROM leads WHERE status = 'new'").get() as { c: number }).c;
+  const newLeads = (await db().prepare("SELECT COUNT(*) c FROM leads WHERE status = 'new'").get() as { c: number }).c;
   return (
-    <Shell locale={locale} nav={t.admin.nav} userName={user.name} newLeads={newLeads} overdue={getOverdue().length} debts={getDebts().filter((d) => d.due).length}>
+    <Shell locale={locale} nav={t.admin.nav} userName={user.name} newLeads={newLeads} overdue={(await getOverdue()).length} debts={(await getDebts()).filter((d) => d.due).length}>
       {children}
     </Shell>
   );

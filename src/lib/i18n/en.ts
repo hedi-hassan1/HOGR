@@ -689,7 +689,7 @@ const en = {
       done: "Backup saved.",
       list: "Saved backups",
       none: "No backups yet.",
-      failed: "Couldn’t save to the extra folder. Check the path.",
+      failed: "Couldn’t save to the extra folder. Check the path.", cloud: "Online, the database service keeps automatic backups and point-in-time restore. Use Download backup to keep your own copy (JSON).",
     },
     reviewsAdmin: {
       pending: "Waiting for approval",
@@ -732,7 +732,7 @@ const en = {
         orPick: "or choose from the gallery",
         save: "Save photo",
         auto: "Use gallery photo",
-        hint: "JPG, PNG or WebP, up to 12 MB.",
+        hint: "JPG, PNG or WebP, up to 4 MB.",
       },
       reviews: {
         add: "Add review",

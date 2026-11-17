@@ -13,17 +13,17 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
   const user = await requireUser(locale);
   const t = getDict(locale);
   const a = t.admin;
-  const cur = getSettings().currency || "IQD";
+  const cur = (await getSettings()).currency || "IQD";
   const base = `/${locale}/admin`;
   const today = todayISO();
   const monthStart = today.slice(0, 8) + "01";
   const d = db();
 
-  const revenue = (d.prepare("SELECT COALESCE(SUM(amount),0) s FROM payments WHERE date >= ?").get(monthStart) as { s: number }).s;
-  const expenses = (d.prepare("SELECT COALESCE(SUM(amount),0) s FROM expenses WHERE date >= ?").get(monthStart) as { s: number }).s;
+  const revenue = (await d.prepare("SELECT COALESCE(SUM(amount),0) s FROM payments WHERE date >= ?").get(monthStart) as { s: number }).s;
+  const expenses = (await d.prepare("SELECT COALESCE(SUM(amount),0) s FROM expenses WHERE date >= ?").get(monthStart) as { s: number }).s;
 
-  const totals = allOrderTotals();
-  const orders = d.prepare("SELECT o.id, o.status, o.title, c.name client FROM orders o JOIN clients c ON c.id = o.client_id").all() as { id: number; status: string; title: string | null; client: string }[];
+  const totals = (await allOrderTotals());
+  const orders = await d.prepare("SELECT o.id, o.status, o.title, c.name client FROM orders o JOIN clients c ON c.id = o.client_id").all() as { id: number; status: string; title: string | null; client: string }[];
   const active = orders.filter((o) => o.status !== "quote" && o.status !== "cancelled");
   const outstanding = active.reduce((s, o) => s + Math.max(0, totals.get(o.id)?.balance || 0), 0);
   const owed = active
@@ -35,15 +35,14 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
   const pipelineKeys = ["quote", "confirmed", "production", "ready", "installed"] as const;
   const pipeline = pipelineKeys.map((k) => ({ k, n: orders.filter((o) => o.status === k).length }));
 
-  const upcoming = d
-    .prepare(
+  const upcoming = await d.prepare(
       `SELECT b.*, c.name cname, c.phone cphone FROM bookings b LEFT JOIN clients c ON c.id = b.client_id
        WHERE b.status = 'scheduled' ORDER BY b.date, b.time LIMIT 7`,
     )
     .all() as { id: number; date: string; time: string | null; type: string; name: string | null; cname: string | null; phone: string | null; cphone: string | null; address: string | null }[];
 
-  const leads = d.prepare("SELECT * FROM leads WHERE status = 'new' ORDER BY id DESC LIMIT 5").all() as { id: number; name: string; phone: string; service: string | null; created_at: string }[];
-  const low = d.prepare("SELECT * FROM inventory WHERE quantity <= min_quantity AND min_quantity > 0 ORDER BY name LIMIT 6").all() as { id: number; name: string; quantity: number; unit: string | null }[];
+  const leads = await d.prepare("SELECT * FROM leads WHERE status = 'new' ORDER BY id DESC LIMIT 5").all() as { id: number; name: string; phone: string; service: string | null; created_at: string }[];
+  const low = await d.prepare("SELECT * FROM inventory WHERE quantity <= min_quantity AND min_quantity > 0 ORDER BY name LIMIT 6").all() as { id: number; name: string; quantity: number; unit: string | null }[];
 
   // Last 6 months of payments
   const months: { key: string; label: string; v: number }[] = [];
@@ -52,14 +51,14 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
     const dt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
     months.push({ key: dt.toISOString().slice(0, 7), label: monthName(dt.getUTCMonth(), locale), v: 0 });
   }
-  const sums = d.prepare("SELECT substr(date,1,7) m, SUM(amount) s FROM payments WHERE date >= ? GROUP BY m").all(months[0].key + "-01") as { m: string; s: number }[];
+  const sums = await d.prepare("SELECT substr(date,1,7) m, SUM(amount) s FROM payments WHERE date >= ? GROUP BY m").all(months[0].key + "-01") as { m: string; s: number }[];
   for (const s of sums) {
     const m = months.find((x) => x.key === s.m);
     if (m) m.v = s.s;
   }
   const maxV = Math.max(1, ...months.map((m) => m.v));
-  const waiting = getWaiting();
-  const { red } = followupDays();
+  const waiting = (await getWaiting());
+  const { red } = (await followupDays());
 
   const quick = [
     { href: `${base}/clients?new=1`, label: a.dashboard.quick.client, icon: UserPlus },

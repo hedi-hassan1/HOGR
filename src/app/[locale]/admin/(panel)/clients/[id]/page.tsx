@@ -15,16 +15,16 @@ export default async function ClientPage({ params }: { params: Promise<{ locale:
   const t = getDict(locale);
   const a = t.admin;
   const base = `/${locale}/admin`;
-  const cur = getSettings().currency;
+  const cur = (await getSettings()).currency;
   const d = db();
-  const c = d.prepare("SELECT * FROM clients WHERE id = ?").get(Number(id)) as ClientRow | undefined;
+  const c = await d.prepare("SELECT * FROM clients WHERE id = ?").get(Number(id)) as ClientRow | undefined;
   if (!c) notFound();
 
-  const orders = d.prepare("SELECT * FROM orders WHERE client_id = ? ORDER BY id DESC").all(c.id) as { id: number; title: string | null; status: string; created_at: string }[];
-  const totals = allOrderTotals();
-  const ms = d.prepare("SELECT m.*, (SELECT COUNT(*) FROM measurement_items i WHERE i.measurement_id = m.id) n FROM measurements m WHERE client_id = ? ORDER BY id DESC").all(c.id) as { id: number; title: string | null; date: string | null; n: number }[];
-  const pays = d.prepare("SELECT * FROM payments WHERE client_id = ? ORDER BY date DESC, id DESC").all(c.id) as { id: number; amount: number; method: string; date: string; order_id: number | null }[];
-  const books = d.prepare("SELECT * FROM bookings WHERE client_id = ? ORDER BY date DESC LIMIT 10").all(c.id) as { id: number; date: string; time: string | null; type: string; status: string }[];
+  const orders = await d.prepare("SELECT * FROM orders WHERE client_id = ? ORDER BY id DESC").all(c.id) as { id: number; title: string | null; status: string; created_at: string }[];
+  const totals = (await allOrderTotals());
+  const ms = await d.prepare("SELECT m.*, (SELECT COUNT(*) FROM measurement_items i WHERE i.measurement_id = m.id) n FROM measurements m WHERE client_id = ? ORDER BY id DESC").all(c.id) as { id: number; title: string | null; date: string | null; n: number }[];
+  const pays = await d.prepare("SELECT * FROM payments WHERE client_id = ? ORDER BY date DESC, id DESC").all(c.id) as { id: number; amount: number; method: string; date: string; order_id: number | null }[];
+  const books = await d.prepare("SELECT * FROM bookings WHERE client_id = ? ORDER BY date DESC LIMIT 10").all(c.id) as { id: number; date: string; time: string | null; type: string; status: string }[];
 
   const billed = orders.filter((o) => o.status !== "quote" && o.status !== "cancelled").reduce((s, o) => s + (totals.get(o.id)?.total || 0), 0);
   const paid = pays.reduce((s, p) => s + p.amount, 0);

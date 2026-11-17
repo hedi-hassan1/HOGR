@@ -15,20 +15,19 @@ export default async function PaymentsPage({ params, searchParams }: { params: P
   const sp = await searchParams;
   const a = getDict(locale).admin;
   const base = `/${locale}/admin`;
-  const cur = getSettings().currency;
+  const cur = (await getSettings()).currency;
   const from = sp.from || todayISO().slice(0, 8) + "01";
   const to = sp.to || todayISO();
 
   const args: unknown[] = [from, to];
   let where = "p.date >= ? AND p.date <= ?";
   if (sp.method) { where += " AND p.method = ?"; args.push(sp.method); }
-  const rows = db()
-    .prepare(`SELECT p.*, c.name cname, o.title otitle FROM payments p LEFT JOIN clients c ON c.id = p.client_id LEFT JOIN orders o ON o.id = p.order_id WHERE ${where} ORDER BY p.date DESC, p.id DESC`)
+  const rows = await db().prepare(`SELECT p.*, c.name cname, o.title otitle FROM payments p LEFT JOIN clients c ON c.id = p.client_id LEFT JOIN orders o ON o.id = p.order_id WHERE ${where} ORDER BY p.date DESC, p.id DESC`)
     .all(...args) as { id: number; amount: number; method: string; date: string; note: string | null; order_id: number | null; client_id: number | null; cname: string | null }[];
   const total = rows.reduce((s, r) => s + r.amount, 0);
 
-  const orders = db().prepare("SELECT o.id, o.title, c.name FROM orders o JOIN clients c ON c.id = o.client_id WHERE o.status != 'cancelled' ORDER BY o.id DESC").all() as { id: number; title: string | null; name: string }[];
-  const clients = db().prepare("SELECT id, name FROM clients ORDER BY name").all() as { id: number; name: string }[];
+  const orders = await db().prepare("SELECT o.id, o.title, c.name FROM orders o JOIN clients c ON c.id = o.client_id WHERE o.status != 'cancelled' ORDER BY o.id DESC").all() as { id: number; title: string | null; name: string }[];
+  const clients = await db().prepare("SELECT id, name FROM clients ORDER BY name").all() as { id: number; name: string }[];
 
   return (
     <>
@@ -37,7 +36,7 @@ export default async function PaymentsPage({ params, searchParams }: { params: P
         active={sp.tab === "unpaid" ? "unpaid" : "list"}
         items={[
           { key: "list", href: `${base}/payments`, label: a.payments.title },
-          { key: "unpaid", href: `${base}/payments?tab=unpaid`, label: a.debts.tab, count: getDebts().length },
+          { key: "unpaid", href: `${base}/payments?tab=unpaid`, label: a.debts.tab, count: (await getDebts()).length },
         ]}
       />
       {sp.tab === "unpaid" ? (

@@ -11,9 +11,9 @@ export default async function ReviewPage({ params }: { params: Promise<{ locale:
   const { locale, token } = await params;
   const t = getDict(locale);
   const L = t.site.review;
-  const o = orderByToken(token);
+  const o = (await orderByToken(token));
   if (!o) return <section className="mx-auto max-w-2xl px-4 py-24 text-center text-lg text-muted">{t.site.client.invalid}</section>;
-  const already = !!db().prepare("SELECT 1 FROM reviews WHERE order_id = ?").get(o.id);
+  const already = !!await db().prepare("SELECT 1 FROM reviews WHERE order_id = ?").get(o.id);
 
   return (
     <section className="mx-auto max-w-xl px-4 pb-24 pt-12 sm:px-6">

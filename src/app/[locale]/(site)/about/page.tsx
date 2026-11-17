@@ -5,15 +5,15 @@ import { getFaqs, getSiteConfig, getSiteDict } from "@/lib/content";
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
-  return { title: getSiteDict(locale).site.about.title };
+  return { title: (await getSiteDict(locale)).site.about.title };
 }
 
 export default async function AboutPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const t = getSiteDict(locale);
+  const t = (await getSiteDict(locale));
   const a = t.site.about;
-  const cfg = getSiteConfig();
-  const faqs = getFaqs(locale) as { id: number; q: string; a: string }[];
+  const cfg = (await getSiteConfig());
+  const faqs = (await getFaqs(locale)) as { id: number; q: string; a: string }[];
   const q = locale === "en" ? ["“", "”"] : ["«", "»"];
 
   return (

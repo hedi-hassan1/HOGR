@@ -2,13 +2,14 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { headers } from "next/headers";
-import { db, DATA_DIR, getSettings, type OrderItem } from "./db";
+import { todayISO } from "./format";
+import { db, DATA_DIR, getSettings, IS_CLOUD, type OrderItem } from "./db";
 
 /* ======================= Links sent to clients ======================= */
 
 /** Best public address for links that clients open: settings → env → phone link → this request. */
 export async function publicBase(): Promise<{ url: string; local: boolean }> {
-  const s = getSettings();
+  const s = (await getSettings());
   const fixed = (s.site_url || process.env.HOGR_SITE_URL || "").replace(/\/$/, "");
   if (/^https?:\/\//.test(fixed)) return { url: fixed, local: false };
   try {
@@ -22,18 +23,17 @@ export async function publicBase(): Promise<{ url: string; local: boolean }> {
 }
 
 /** Random, unguessable token for an order's client page (created once). */
-export function shareToken(orderId: number): string {
-  const row = db().prepare("SELECT share_token FROM orders WHERE id = ?").get(orderId) as { share_token: string | null } | undefined;
+export async function shareToken(orderId: number): Promise<string> {
+  const row = await db().prepare("SELECT share_token FROM orders WHERE id = ?").get(orderId) as { share_token: string | null } | undefined;
   if (row?.share_token) return row.share_token;
   const t = crypto.randomBytes(12).toString("base64url");
-  db().prepare("UPDATE orders SET share_token = ? WHERE id = ?").run(t, orderId);
+  await db().prepare("UPDATE orders SET share_token = ? WHERE id = ?").run(t, orderId);
   return t;
 }
 
-export function orderByToken(token: string) {
+export async function orderByToken(token: string) {
   if (!/^[A-Za-z0-9_-]{10,40}$/.test(token)) return undefined;
-  return db()
-    .prepare("SELECT o.*, c.name cname, c.phone cphone FROM orders o JOIN clients c ON c.id = o.client_id WHERE o.share_token = ?")
+  return await db().prepare("SELECT o.*, c.name cname, c.phone cphone FROM orders o JOIN clients c ON c.id = o.client_id WHERE o.share_token = ?")
     .get(token) as
     | { id: number; client_id: number; cname: string; cphone: string | null; title: string | null; status: string; discount: number; due_date: string | null; notes: string | null; created_at: string; accepted_at: string | null; installed_at: string | null }
     | undefined;
@@ -43,8 +43,8 @@ export function orderByToken(token: string) {
 
 export type Price = { id: number; product_type: string; name_ckb: string | null; name_ar: string | null; name_en: string | null; unit: "piece" | "m2" | "m"; price: number; material: string | null; color: string | null; is_default: number; on_site: number; sort: number };
 
-export function getPrices(): Price[] {
-  return db().prepare("SELECT * FROM price_list ORDER BY product_type, sort, id").all() as Price[];
+export async function getPrices(): Promise<Price[]> {
+  return await db().prepare("SELECT * FROM price_list ORDER BY product_type, sort, id").all() as Price[];
 }
 export const priceName = (p: Price, locale: string) =>
   (locale === "ckb" ? p.name_ckb : locale === "ar" ? p.name_ar : p.name_en) || p.name_en || p.name_ckb || "";
@@ -101,6 +101,7 @@ export function computeMaterials(items: Pick<OrderItem, "product_type" | "width"
 const BACKUP_DIR = path.join(DATA_DIR, "backups");
 
 export function listBackups() {
+  if (IS_CLOUD) return []; // online, the database service keeps its own backups; use Download backup for a copy
   try {
     return fs.readdirSync(BACKUP_DIR).filter((f) => /^hogr-\d{4}-\d{2}-\d{2}\.db$/.test(f)).sort().reverse()
       .map((f) => ({ file: f, size: fs.statSync(path.join(BACKUP_DIR, f)).size }));
@@ -111,15 +112,13 @@ export function listBackups() {
 
 /** Saves today's snapshot (and a copy in the extra folder if set); keeps the newest 30. */
 export async function runBackup(force = false): Promise<{ ok: boolean; extraFailed?: boolean }> {
-  const s = getSettings();
-  const now = new Date();
-  const day = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  if (IS_CLOUD) return { ok: true };
+  const s = (await getSettings());
+  const day = todayISO();
   if (!force && s.backup_last === day) return { ok: true };
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
   const file = path.join(BACKUP_DIR, `hogr-${day}.db`);
-  const tmp = file + ".tmp";
-  await db().backup(tmp);
-  fs.renameSync(tmp, file);
+  await snapshotTo(file);
   let extraFailed = false;
   if (s.backup_dir?.trim()) {
     try {
@@ -130,8 +129,22 @@ export async function runBackup(force = false): Promise<{ ok: boolean; extraFail
     }
   }
   for (const old of listBackups().slice(30)) fs.rmSync(path.join(BACKUP_DIR, old.file), { force: true });
-  db().prepare("INSERT INTO settings(key, value) VALUES ('backup_last', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(day);
+  await db().prepare("INSERT INTO settings(key, value) VALUES ('backup_last', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(day);
   return { ok: true, extraFailed };
+}
+
+/** Consistent copy of the local SQLite file (VACUUM INTO writes a complete, compact database). */
+export async function snapshotTo(file: string) {
+  fs.rmSync(file, { force: true });
+  await db().exec(`VACUUM INTO '${file.replace(/\\/g, "/").replace(/'/g, "''")}'`);
+}
+
+/** Every table as JSON: the portable backup used online (and restorable anywhere). */
+export async function exportJson() {
+  const tables = (await db().prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all()) as { name: string }[];
+  const out: Record<string, unknown[]> = {};
+  for (const t of tables) out[t.name] = await db().prepare(`SELECT * FROM "${t.name.replace(/"/g, "")}"`).all();
+  return { exported_at: new Date().toISOString(), tables: out };
 }
 
 export const backupPath = (file: string) => (/^hogr-\d{4}-\d{2}-\d{2}\.db$/.test(file) ? path.join(BACKUP_DIR, file) : null);

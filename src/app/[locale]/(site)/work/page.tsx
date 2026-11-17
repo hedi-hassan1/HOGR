@@ -7,15 +7,15 @@ import { Gallery } from "@/components/site/Gallery";
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
-  return { title: getSiteDict(locale).site.work.title };
+  return { title: (await getSiteDict(locale)).site.work.title };
 }
 
 export default async function WorkPage({ params, searchParams }: { params: Promise<{ locale: string }>; searchParams: Promise<{ c?: string }> }) {
   const { locale } = await params;
   const { c } = await searchParams;
-  const t = getSiteDict(locale);
+  const t = (await getSiteDict(locale));
   const active = c && (SITE_PRODUCTS as readonly string[]).includes(c) ? c : undefined;
-  const items = getPortfolio({ category: active });
+  const items = (await getPortfolio({ category: active }));
 
   return (
     <section className="mx-auto max-w-7xl px-4 pb-24 pt-12 sm:px-6 md:pt-16">

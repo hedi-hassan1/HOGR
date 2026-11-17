@@ -1,3 +1,4 @@
+import { ImageInput } from "@/components/admin/ImageInput";
 import Link from "next/link";
 import { ExternalLink, Trash2 } from "lucide-react";
 import { getDict, LOCALES } from "@/lib/i18n";
@@ -55,8 +56,8 @@ type T = ReturnType<typeof getDict>;
 
 /* ---------------- Texts ---------------- */
 
-function TextsTab({ locale, w, saved, loc }: { locale: string; w: W; saved?: string; loc: "ckb" | "ar" | "en" }) {
-  const overrides = getOverrides();
+async function TextsTab({ locale, w, saved, loc }: { locale: string; w: W; saved?: string; loc: "ckb" | "ar" | "en" }) {
+  const overrides = (await getOverrides());
   return (
     <div className="space-y-3">
       {SECTIONS.map((section, si) => {
@@ -120,7 +121,7 @@ function ImageForm({ locale, slot, current, w, gallery, auto }: { locale: string
       <Hidden values={{ locale, slot }} />
       <label className="block">
         <span className="label">{w.images.upload}</span>
-        <input type="file" name="image" accept="image/jpeg,image/png,image/webp" className="input py-2 text-sm" />
+        <ImageInput name="image" className="input py-2 text-sm" />
       </label>
       <label className="block">
         <span className="label">{w.images.orPick}</span>
@@ -137,12 +138,12 @@ function ImageForm({ locale, slot, current, w, gallery, auto }: { locale: string
   );
 }
 
-function ImagesTab({ locale, t }: { locale: string; t: T }) {
+async function ImagesTab({ locale, t }: { locale: string; t: T }) {
   const w = t.admin.website;
-  const cfg = getSiteConfig();
-  const gallery = getPortfolio().map((p) => [p.image, `${t.products[p.category as keyof typeof t.products] ?? ""} · ${titleFor(p, locale)}`] as [string, string]);
+  const cfg = (await getSiteConfig());
+  const gallery = (await getPortfolio()).map((p) => [p.image, `${t.products[p.category as keyof typeof t.products] ?? ""} · ${titleFor(p, locale)}`] as [string, string]);
   const autoCovers: Record<string, string> = {};
-  for (const p of getPortfolio()) if (!autoCovers[p.category]) autoCovers[p.category] = p.image;
+  for (const p of (await getPortfolio())) if (!autoCovers[p.category]) autoCovers[p.category] = p.image;
 
   return (
     <div className="space-y-6">
@@ -217,10 +218,10 @@ function ReviewForm({ locale, t, row }: { locale: string; t: T; row?: Testimonia
   );
 }
 
-function ReviewsTab({ locale, t }: { locale: string; t: T }) {
+async function ReviewsTab({ locale, t }: { locale: string; t: T }) {
   const w = t.admin.website;
-  const rows = getTestimonials(locale, true) as Testimonial[];
-  const pending = db().prepare("SELECT * FROM reviews WHERE status = 'pending' ORDER BY id DESC").all() as { id: number; name: string; rating: number; text: string | null; created_at: string }[];
+  const rows = (await getTestimonials(locale, true)) as Testimonial[];
+  const pending = await db().prepare("SELECT * FROM reviews WHERE status = 'pending' ORDER BY id DESC").all() as { id: number; name: string; rating: number; text: string | null; created_at: string }[];
   const R = t.admin.reviewsAdmin;
   return (
     <div className="space-y-4">
@@ -279,9 +280,9 @@ function FaqForm({ locale, t, row }: { locale: string; t: T; row?: Faq }) {
   );
 }
 
-function FaqTab({ locale, t }: { locale: string; t: T }) {
+async function FaqTab({ locale, t }: { locale: string; t: T }) {
   const w = t.admin.website;
-  const rows = getFaqs(locale, true) as Faq[];
+  const rows = (await getFaqs(locale, true)) as Faq[];
   return (
     <div className="space-y-4">
       {rows.length === 0 && <p className="text-muted">{w.faq.empty}</p>}
@@ -306,9 +307,9 @@ function FaqTab({ locale, t }: { locale: string; t: T }) {
 
 /* ---------------- Sections ---------------- */
 
-function SectionsTab({ locale, t, saved }: { locale: string; t: T; saved: boolean }) {
+async function SectionsTab({ locale, t, saved }: { locale: string; t: T; saved: boolean }) {
   const w = t.admin.website;
-  const cfg = getSiteConfig();
+  const cfg = (await getSiteConfig());
   return (
     <Panel title={w.sections.title} action={saved && <Badge tone="green">{w.saved}</Badge>}>
       <form action={saveToggles} className="space-y-1">

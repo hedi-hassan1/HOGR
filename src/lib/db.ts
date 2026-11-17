@@ -1,4 +1,5 @@
-import Database from "better-sqlite3";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { createClient, type Client, type InValue, type ResultSet, type Transaction } from "@libsql/client";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -6,7 +7,9 @@ import en from "./i18n/en";
 import ckb from "./i18n/ckb";
 import ar from "./i18n/ar";
 
-export const DATA_DIR = process.env.HOGR_DATA_DIR || path.join(process.cwd(), "data");
+/** Running on Vercel (read-only disk; data lives in Turso, photos in Vercel Blob). */
+export const IS_CLOUD = !!process.env.VERCEL;
+export const DATA_DIR = process.env.HOGR_DATA_DIR || (IS_CLOUD ? "/tmp/hogr" : path.join(process.cwd(), "data"));
 export const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
 
 const SCHEMA = `
@@ -203,79 +206,83 @@ const PORTFOLIO_SEED: [string, string, string, string, string, number][] = [
   ["sesam.jpg", "bed_panel", "دیواری پشتی قەرەوێڵە", "جدار السرير", "Upholstered bed wall", 1],
 ];
 
-function init(db: Database.Database) {
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  db.exec(SCHEMA);
+async function init(db: DbApi) {
+  await db.exec(SCHEMA);
 
   // Migrations for databases created by older versions
-  const miCols = (db.prepare("PRAGMA table_info(measurement_items)").all() as { name: string }[]).map((c) => c.name);
-  if (!miCols.includes("photo")) db.exec("ALTER TABLE measurement_items ADD COLUMN photo TEXT");
-  const mCols = (db.prepare("PRAGMA table_info(measurements)").all() as { name: string }[]).map((c) => c.name);
-  if (!mCols.includes("closed")) db.exec("ALTER TABLE measurements ADD COLUMN closed INTEGER NOT NULL DEFAULT 0");
-  if (!mCols.includes("notified_at")) db.exec("ALTER TABLE measurements ADD COLUMN notified_at TEXT");
-  const bCols = (db.prepare("PRAGMA table_info(bookings)").all() as { name: string }[]).map((c) => c.name);
-  if (!bCols.includes("worker_id")) db.exec("ALTER TABLE bookings ADD COLUMN worker_id INTEGER REFERENCES workers(id) ON DELETE SET NULL");
-  if (!bCols.includes("duration_min")) db.exec("ALTER TABLE bookings ADD COLUMN duration_min INTEGER");
-  const oCols = (db.prepare("PRAGMA table_info(orders)").all() as { name: string }[]).map((c) => c.name);
+  const cols = async (t: string) => ((await db.prepare(`PRAGMA table_info(${t})`).all()) as { name: string }[]).map((c) => c.name);
+  const miCols = await cols("measurement_items");
+  if (!miCols.includes("photo")) await db.exec("ALTER TABLE measurement_items ADD COLUMN photo TEXT");
+  const mCols = await cols("measurements");
+  if (!mCols.includes("closed")) await db.exec("ALTER TABLE measurements ADD COLUMN closed INTEGER NOT NULL DEFAULT 0");
+  if (!mCols.includes("notified_at")) await db.exec("ALTER TABLE measurements ADD COLUMN notified_at TEXT");
+  const bCols = await cols("bookings");
+  if (!bCols.includes("worker_id")) await db.exec("ALTER TABLE bookings ADD COLUMN worker_id INTEGER REFERENCES workers(id) ON DELETE SET NULL");
+  if (!bCols.includes("duration_min")) await db.exec("ALTER TABLE bookings ADD COLUMN duration_min INTEGER");
+  const oCols = await cols("orders");
   if (!oCols.includes("installed_at")) {
-    db.exec("ALTER TABLE orders ADD COLUMN installed_at TEXT");
+    await db.exec("ALTER TABLE orders ADD COLUMN installed_at TEXT");
     // Existing installed/completed orders: assume installed when created
-    db.exec("UPDATE orders SET installed_at = date(created_at) WHERE status IN ('installed','completed')");
+    await db.exec("UPDATE orders SET installed_at = date(created_at) WHERE status IN ('installed','completed')");
   }
-  if (!oCols.includes("debt_notified_at")) db.exec("ALTER TABLE orders ADD COLUMN debt_notified_at TEXT");
-  if (!oCols.includes("debt_reminded_at")) db.exec("ALTER TABLE orders ADD COLUMN debt_reminded_at TEXT");
-  if (!oCols.includes("debt_reminders")) db.exec("ALTER TABLE orders ADD COLUMN debt_reminders INTEGER NOT NULL DEFAULT 0");
-  if (!oCols.includes("share_token")) db.exec("ALTER TABLE orders ADD COLUMN share_token TEXT");
-  if (!oCols.includes("accepted_at")) db.exec("ALTER TABLE orders ADD COLUMN accepted_at TEXT");
-  if (!oCols.includes("materials_taken_at")) db.exec("ALTER TABLE orders ADD COLUMN materials_taken_at TEXT");
-  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_token ON orders(share_token)");
-  const pCols = (db.prepare("PRAGMA table_info(portfolio)").all() as { name: string }[]).map((c) => c.name);
-  if (!pCols.includes("before_image")) db.exec("ALTER TABLE portfolio ADD COLUMN before_image TEXT");
-  const tCols = (db.prepare("PRAGMA table_info(testimonials)").all() as { name: string }[]).map((c) => c.name);
-  if (!tCols.includes("rating")) db.exec("ALTER TABLE testimonials ADD COLUMN rating INTEGER");
+  if (!oCols.includes("debt_notified_at")) await db.exec("ALTER TABLE orders ADD COLUMN debt_notified_at TEXT");
+  if (!oCols.includes("debt_reminded_at")) await db.exec("ALTER TABLE orders ADD COLUMN debt_reminded_at TEXT");
+  if (!oCols.includes("debt_reminders")) await db.exec("ALTER TABLE orders ADD COLUMN debt_reminders INTEGER NOT NULL DEFAULT 0");
+  if (!oCols.includes("share_token")) await db.exec("ALTER TABLE orders ADD COLUMN share_token TEXT");
+  if (!oCols.includes("accepted_at")) await db.exec("ALTER TABLE orders ADD COLUMN accepted_at TEXT");
+  if (!oCols.includes("materials_taken_at")) await db.exec("ALTER TABLE orders ADD COLUMN materials_taken_at TEXT");
+  await db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_token ON orders(share_token)");
+  const pCols = await cols("portfolio");
+  if (!pCols.includes("before_image")) await db.exec("ALTER TABLE portfolio ADD COLUMN before_image TEXT");
+  const tCols = await cols("testimonials");
+  if (!tCols.includes("rating")) await db.exec("ALTER TABLE testimonials ADD COLUMN rating INTEGER");
+  await db.exec(`CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id INTEGER PRIMARY KEY, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL, auth TEXT NOT NULL,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, label TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
 
   // Region update (2026-11): replace the old Sulaymaniyah-only defaults, but never text the owner changed
   const fix = db.prepare("UPDATE settings SET value = ? WHERE key = ? AND value = ?");
-  fix.run("Chwarqurna, Raparin, Kurdistan Region", "address", "Chwarqurna, Sulaymaniyah");
-  fix.run("چوارقوڕنە، ڕاپەڕین، هەرێمی کوردستان", "address_ckb", "چوارقوڕنە، سلێمانی");
-  fix.run("جوارقورنة، رابرين، إقليم كوردستان", "address_ar", "جوارقورنة، السليمانية");
-  if ((db.prepare("SELECT name FROM sqlite_master WHERE name = 'faqs'").get())) {
-    db.prepare("UPDATE faqs SET a_ckb = ?, a_ar = ?, a_en = ? WHERE a_en = ?").run(
-      ckb.site.about.faq[3].a, ar.site.about.faq[3].a, en.site.about.faq[3].a,
-      "Sulaymaniyah city and the surrounding area. Call us for projects further away.",
-    );
-  }
+  await fix.run("Chwarqurna, Raparin, Kurdistan Region", "address", "Chwarqurna, Sulaymaniyah");
+  await fix.run("چوارقوڕنە، ڕاپەڕین، هەرێمی کوردستان", "address_ckb", "چوارقوڕنە، سلێمانی");
+  await fix.run("جوارقورنة، رابرين، إقليم كوردستان", "address_ar", "جوارقورنة، السليمانية");
+  await db.prepare("UPDATE faqs SET a_ckb = ?, a_ar = ?, a_en = ? WHERE a_en = ?").run(
+    ckb.site.about.faq[3].a, ar.site.about.faq[3].a, en.site.about.faq[3].a,
+    "Sulaymaniyah city and the surrounding area. Call us for projects further away.",
+  );
 
   const insSetting = db.prepare("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)");
-  for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) insSetting.run(k, v);
+  for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) await insSetting.run(k, v);
 
-  const users = db.prepare("SELECT COUNT(*) c FROM users").get() as { c: number };
+  const users = (await db.prepare("SELECT COUNT(*) c FROM users").get()) as { c: number };
   if (users.c === 0) {
     // No fixed default password (the code is public): use HOGR_ADMIN_PASSWORD, or create a random one
-    // and save it in data/admin-password.txt for the first login.
+    // shown in the server log and (locally) saved in data/admin-password.txt for the first login.
     const first = process.env.HOGR_ADMIN_PASSWORD || crypto.randomBytes(6).toString("base64url");
-    db.prepare("INSERT INTO users(name, username, password_hash, role) VALUES (?,?,?,?)").run("Hogr Sardar", "admin", hashPassword(first), "admin");
+    await db.prepare("INSERT INTO users(name, username, password_hash, role) VALUES (?,?,?,?)").run("Hogr Sardar", "admin", hashPassword(first), "admin");
     if (!process.env.HOGR_ADMIN_PASSWORD) {
-      fs.writeFileSync(path.join(DATA_DIR, "admin-password.txt"), `Username: admin\nPassword: ${first}\n\nChange it in Settings after logging in, then delete this file.\n`);
-      console.log(`\n  First login: username "admin", password "${first}" (also saved in data/admin-password.txt)\n`);
+      if (!IS_CLOUD) {
+        fs.writeFileSync(path.join(DATA_DIR, "admin-password.txt"), `Username: admin\nPassword: ${first}\n\nChange it in Settings after logging in, then delete this file.\n`);
+      }
+      console.log(`\n  First login: username "admin", password "${first}"\n`);
     }
   }
 
-  if ((db.prepare("SELECT COUNT(*) c FROM testimonials").get() as { c: number }).c === 0) {
-    db.prepare("INSERT INTO testimonials(name_ckb,name_ar,name_en,role_ckb,role_ar,role_en,text_ckb,text_ar,text_en) VALUES (?,?,?,?,?,?,?,?,?)").run(
+  if (((await db.prepare("SELECT COUNT(*) c FROM testimonials").get()) as { c: number }).c === 0) {
+    await db.prepare("INSERT INTO testimonials(name_ckb,name_ar,name_en,role_ckb,role_ar,role_en,text_ckb,text_ar,text_en) VALUES (?,?,?,?,?,?,?,?,?)").run(
       ckb.site.quote.name, ar.site.quote.name, en.site.quote.name, ckb.site.quote.role, ar.site.quote.role, en.site.quote.role,
       ckb.site.quote.text, ar.site.quote.text, en.site.quote.text,
     );
   }
-  if ((db.prepare("SELECT COUNT(*) c FROM faqs").get() as { c: number }).c === 0) {
+  if (((await db.prepare("SELECT COUNT(*) c FROM faqs").get()) as { c: number }).c === 0) {
     const ins = db.prepare("INSERT INTO faqs(q_ckb,q_ar,q_en,a_ckb,a_ar,a_en,sort) VALUES (?,?,?,?,?,?,?)");
-    en.site.about.faq.forEach((_, i) =>
-      ins.run(ckb.site.about.faq[i].q, ar.site.about.faq[i].q, en.site.about.faq[i].q, ckb.site.about.faq[i].a, ar.site.about.faq[i].a, en.site.about.faq[i].a, i),
-    );
+    for (let i = 0; i < en.site.about.faq.length; i++) {
+      await ins.run(ckb.site.about.faq[i].q, ar.site.about.faq[i].q, en.site.about.faq[i].q, ckb.site.about.faq[i].a, ar.site.about.faq[i].a, en.site.about.faq[i].a, i);
+    }
   }
 
-  if ((db.prepare("SELECT COUNT(*) c FROM price_list").get() as { c: number }).c === 0) {
+  if (((await db.prepare("SELECT COUNT(*) c FROM price_list").get()) as { c: number }).c === 0) {
     // Starter prices (IQD) so quotes work on day one; the owner edits them in Price list
     const ins = db.prepare("INSERT INTO price_list(product_type, name_ckb, name_ar, name_en, unit, price, material, color, is_default, sort) VALUES (?,?,?,?,?,?,?,?,?,?)");
     const seed: [string, string, string, string, string, number, string, string, number][] = [
@@ -289,32 +296,120 @@ function init(db: Database.Database) {
       ["vanity", "مێزی ئارایشت", "تسريحة", "Dressing table", "piece", 750000, "MDF", "", 1],
       ["bed_panel", "دیواری قەرەوێڵە", "جدار السرير", "Bed wall", "m2", 160000, "", "", 1],
     ];
-    seed.forEach((r, i) => ins.run(...r, i));
+    for (let i = 0; i < seed.length; i++) await ins.run(...seed[i], i);
   }
 
-  const p = db.prepare("SELECT COUNT(*) c FROM portfolio").get() as { c: number };
+  const p = (await db.prepare("SELECT COUNT(*) c FROM portfolio").get()) as { c: number };
   if (p.c === 0) {
-    const ins = db.prepare(
-      "INSERT INTO portfolio(image, category, title_ckb, title_ar, title_en, featured, sort) VALUES (?,?,?,?,?,?,?)",
-    );
-    PORTFOLIO_SEED.forEach((row, i) => ins.run(`/images/work/${row[0]}`, row[1], row[2], row[3], row[4], row[5], i));
+    const ins = db.prepare("INSERT INTO portfolio(image, category, title_ckb, title_ar, title_en, featured, sort) VALUES (?,?,?,?,?,?,?)");
+    for (let i = 0; i < PORTFOLIO_SEED.length; i++) {
+      const row = PORTFOLIO_SEED[i];
+      await ins.run(`/images/work/${row[0]}`, row[1], row[2], row[3], row[4], row[5], i);
+    }
   }
 }
 
-const g = globalThis as unknown as { __hogrDb?: Database.Database };
+/* ---------------- connection ----------------
+ * One code path for both places the app runs:
+ *  - this computer: a SQLite file (data/hogr.db)
+ *  - Vercel: a Turso (libSQL) cloud database, from TURSO_DATABASE_URL + TURSO_AUTH_TOKEN
+ * The API mirrors better-sqlite3 (prepare → get/all/run, transaction) but every call is awaited.
+ */
 
-export function db() {
-  if (!g.__hogrDb) {
-    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-    const d = new Database(path.join(DATA_DIR, "hogr.db"));
-    init(d);
-    g.__hogrDb = d;
+const DB_URL = process.env.TURSO_DATABASE_URL || process.env.LIBSQL_URL || (process.env.DATABASE_URL?.startsWith("libsql:") ? process.env.DATABASE_URL : "");
+const DB_TOKEN = process.env.TURSO_AUTH_TOKEN || process.env.LIBSQL_AUTH_TOKEN;
+
+export type RunResult = { lastInsertRowid: number; changes: number };
+export type Stmt = {
+  get: (...args: unknown[]) => Promise<any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  all: (...args: unknown[]) => Promise<any[]>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  run: (...args: unknown[]) => Promise<RunResult>;
+};
+export type DbApi = {
+  prepare: (sql: string) => Stmt;
+  exec: (sql: string) => Promise<void>;
+  transaction: <A extends unknown[], R>(fn: (...a: A) => Promise<R>) => (...a: A) => Promise<R>;
+};
+
+const g = globalThis as unknown as { __hogrClient?: Client; __hogrReady?: Promise<void> };
+const txStore = new AsyncLocalStorage<Transaction>();
+
+function client(): Client {
+  if (!g.__hogrClient) {
+    if (DB_URL) g.__hogrClient = createClient({ url: DB_URL, authToken: DB_TOKEN });
+    else if (IS_CLOUD) throw new Error("Database not connected: add a Turso database to this Vercel project (TURSO_DATABASE_URL).");
+    else {
+      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+      g.__hogrClient = createClient({ url: "file:" + path.join(DATA_DIR, "hogr.db").replace(/\\/g, "/") });
+    }
   }
-  return g.__hogrDb;
+  return g.__hogrClient;
 }
 
-export function getSettings(locale?: string): Record<string, string> {
-  const rows = db().prepare("SELECT key, value FROM settings").all() as { key: string; value: string }[];
+const toArg = (v: unknown): InValue => (v === undefined ? null : typeof v === "boolean" ? (v ? 1 : 0) : (v as InValue));
+const toRows = (rs: ResultSet) => rs.rows.map((r) => Object.fromEntries(rs.columns.map((c, i) => [c, r[i]])));
+
+function makeApi(waitReady: boolean): DbApi {
+  const execute = async (sql: string, args: unknown[]) => {
+    if (waitReady) await ready();
+    const target = txStore.getStore() ?? client();
+    return target.execute({ sql, args: args.map(toArg) });
+  };
+  return {
+    prepare: (sql) => ({
+      get: async (...args) => toRows(await execute(sql, args))[0],
+      all: async (...args) => toRows(await execute(sql, args)),
+      run: async (...args) => {
+        const rs = await execute(sql, args);
+        return { lastInsertRowid: Number(rs.lastInsertRowid ?? 0), changes: rs.rowsAffected };
+      },
+    }),
+    exec: async (sql) => {
+      if (waitReady) await ready();
+      await (txStore.getStore() ?? client()).executeMultiple(sql);
+    },
+    transaction: (fn) => async (...a) => {
+      if (txStore.getStore()) return fn(...a); // already inside one
+      if (waitReady) await ready();
+      const tx = await client().transaction("write");
+      try {
+        const r = await txStore.run(tx, () => fn(...a));
+        await tx.commit();
+        return r;
+      } catch (e) {
+        await tx.rollback().catch(() => {});
+        throw e;
+      } finally {
+        tx.close();
+      }
+    },
+  };
+}
+
+const api = makeApi(true);
+
+/** Creates/updates the tables once per server start. */
+function ready() {
+  if (!g.__hogrReady) {
+    g.__hogrReady = (async () => {
+      if (!DB_URL) await client().execute("PRAGMA foreign_keys = ON");
+      await init(makeApi(false));
+    })().catch((e) => {
+      g.__hogrReady = undefined; // retry on the next request
+      throw e;
+    });
+  }
+  return g.__hogrReady;
+}
+
+export function db(): DbApi {
+  return api;
+}
+
+export const isCloudDb = () => !!DB_URL;
+
+export async function getSettings(locale?: string): Promise<Record<string, string>> {
+  const rows = (await db().prepare("SELECT key, value FROM settings").all()) as { key: string; value: string }[];
   const s: Record<string, string> = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   if (locale && locale !== "en" && s[`address_${locale}`]) s.address = s[`address_${locale}`];
   return s;
@@ -342,20 +437,20 @@ export function lineTotal(i: Pick<OrderItem, "width" | "height" | "qty" | "unit"
   return i.qty * i.unit_price;
 }
 
-export function orderTotals(orderId: number) {
-  const items = db().prepare("SELECT * FROM order_items WHERE order_id = ?").all(orderId) as OrderItem[];
-  const o = db().prepare("SELECT discount FROM orders WHERE id = ?").get(orderId) as { discount: number } | undefined;
+export async function orderTotals(orderId: number) {
+  const items = (await db().prepare("SELECT * FROM order_items WHERE order_id = ?").all(orderId)) as OrderItem[];
+  const o = (await db().prepare("SELECT discount FROM orders WHERE id = ?").get(orderId)) as { discount: number } | undefined;
   const subtotal = items.reduce((s, i) => s + lineTotal(i), 0);
   const total = Math.max(0, subtotal - (o?.discount || 0));
-  const paid = (db().prepare("SELECT COALESCE(SUM(amount),0) s FROM payments WHERE order_id = ?").get(orderId) as { s: number }).s;
+  const paid = ((await db().prepare("SELECT COALESCE(SUM(amount),0) s FROM payments WHERE order_id = ?").get(orderId)) as { s: number }).s;
   return { subtotal, total, paid, balance: total - paid };
 }
 
 /** Totals for many orders at once (used by lists and dashboard). */
-export function allOrderTotals() {
-  const items = db().prepare("SELECT order_id, width, height, qty, unit, unit_price FROM order_items").all() as (OrderItem & { order_id: number })[];
-  const pays = db().prepare("SELECT order_id, SUM(amount) s FROM payments WHERE order_id IS NOT NULL GROUP BY order_id").all() as { order_id: number; s: number }[];
-  const orders = db().prepare("SELECT id, discount FROM orders").all() as { id: number; discount: number }[];
+export async function allOrderTotals() {
+  const items = (await db().prepare("SELECT order_id, width, height, qty, unit, unit_price FROM order_items").all()) as (OrderItem & { order_id: number })[];
+  const pays = (await db().prepare("SELECT order_id, SUM(amount) s FROM payments WHERE order_id IS NOT NULL GROUP BY order_id").all()) as { order_id: number; s: number }[];
+  const orders = (await db().prepare("SELECT id, discount FROM orders").all()) as { id: number; discount: number }[];
   const map = new Map<number, { subtotal: number; total: number; paid: number; balance: number }>();
   for (const o of orders) map.set(o.id, { subtotal: 0, total: 0, paid: 0, balance: 0 });
   for (const i of items) {

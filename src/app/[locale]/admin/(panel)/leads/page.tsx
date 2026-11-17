@@ -16,7 +16,7 @@ export default async function LeadsPage({ params, searchParams }: { params: Prom
   const a = t.admin;
   const base = `/${locale}/admin`;
   const status = sp.status && (LEAD_STATUSES as readonly string[]).includes(sp.status) ? sp.status : "all";
-  const all = db().prepare("SELECT * FROM leads ORDER BY id DESC").all() as L[];
+  const all = await db().prepare("SELECT * FROM leads ORDER BY id DESC").all() as L[];
   const rows = status === "all" ? all : all.filter((l) => l.status === status);
 
   return (

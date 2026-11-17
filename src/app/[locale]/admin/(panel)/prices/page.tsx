@@ -13,8 +13,8 @@ export default async function PricesPage({ params, searchParams }: { params: Pro
   const a = t.admin;
   const L = a.prices;
   const base = `/${locale}/admin`;
-  const cur = getSettings().currency;
-  const prices = getPrices();
+  const cur = (await getSettings()).currency;
+  const prices = (await getPrices());
   const editing = sp.edit ? prices.find((p) => p.id === Number(sp.edit)) : undefined;
   const showForm = !!editing || sp.new === "1";
 
