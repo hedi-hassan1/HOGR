@@ -316,8 +316,19 @@ async function init(db: DbApi) {
  * The API mirrors better-sqlite3 (prepare → get/all/run, transaction) but every call is awaited.
  */
 
-const DB_URL = process.env.TURSO_DATABASE_URL || process.env.LIBSQL_URL || (process.env.DATABASE_URL?.startsWith("libsql:") ? process.env.DATABASE_URL : "");
-const DB_TOKEN = process.env.TURSO_AUTH_TOKEN || process.env.LIBSQL_AUTH_TOKEN;
+/** Finds a setting by exact name first, then by suffix (Vercel may add a prefix like STORAGE_). */
+function envBySuffix(names: string[], accept: (v: string) => boolean = () => true): string | undefined {
+  for (const n of names) { const v = process.env[n]; if (v && accept(v)) return v; }
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v && names.some((n) => k.endsWith("_" + n)) && accept(v)) return v;
+  }
+  return undefined;
+}
+export const DB_URL =
+  envBySuffix(["TURSO_DATABASE_URL", "LIBSQL_URL", "TURSO_URL"]) ||
+  envBySuffix(["DATABASE_URL"], (v) => v.startsWith("libsql:")) ||
+  "";
+export const DB_TOKEN = envBySuffix(["TURSO_AUTH_TOKEN", "LIBSQL_AUTH_TOKEN", "TURSO_TOKEN", "DATABASE_AUTH_TOKEN"]);
 
 export type RunResult = { lastInsertRowid: number; changes: number };
 export type Stmt = {
