@@ -15,7 +15,7 @@ export async function GET() {
     running_on: IS_CLOUD ? "Vercel" : "this computer",
     database_address: DB_URL ? "set" : IS_CLOUD ? "MISSING: connect Turso in Storage (Production), then Redeploy" : "local file",
     database_token: DB_TOKEN ? "set" : IS_CLOUD ? "MISSING: TURSO_AUTH_TOKEN" : "not needed",
-    photo_storage: has("BLOB_READ_WRITE_TOKEN") ? "set" : IS_CLOUD ? "MISSING: create a Blob store in Storage and connect it" : "local folder",
+    photo_storage: has("BLOB_READ_WRITE_TOKEN") || has("BLOB_STORE_ID") ? "set" : IS_CLOUD ? "MISSING: create a Blob store in Storage and connect it" : "local folder",
     first_admin_password: has("HOGR_ADMIN_PASSWORD") ? "set" : "not set (a random one is printed in the logs on first start)",
     cron_secret: has("CRON_SECRET") ? "set" : "not set",
     related_setting_names: related.length ? related : ["none found"],

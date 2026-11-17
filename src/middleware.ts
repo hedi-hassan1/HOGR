@@ -8,12 +8,8 @@ export function middleware(req: NextRequest) {
   if (LOCALES.includes(first)) return NextResponse.next();
 
   const saved = req.cookies.get("hogr_locale")?.value;
-  let locale = saved && LOCALES.includes(saved) ? saved : "ckb";
-  if (!saved) {
-    const accept = req.headers.get("accept-language") || "";
-    if (/^en/i.test(accept)) locale = "en";
-    else if (/^ar/i.test(accept)) locale = "ar";
-  }
+  // Kurdish (Sorani) is the default for every visitor; another language only if they picked it before.
+  const locale = saved && LOCALES.includes(saved) ? saved : "ckb";
   const url = req.nextUrl.clone();
   url.pathname = `/${locale}${pathname === "/" ? "" : pathname}`;
   return NextResponse.redirect(url);
